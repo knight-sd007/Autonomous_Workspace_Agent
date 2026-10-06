@@ -14,7 +14,7 @@ It features **workspace-level filesystem isolation**, a **centralized tool permi
 * **Human-in-the-Loop Gate**: Automatically intercepts higher-risk or destructive operations (e.g. file deletion, schema/data mutations, destructive SQL) and pauses execution for explicit user approval.
 * **Controlled Python Execution**: Executes Python scripts inside workspace context with strict timeout limits (default 10s) and stdout/stderr capture.
 * **SQLite / SQL Query Guard**: Validates SQL statements prior to database execution, differentiating safe `READ-ONLY` SELECT queries from `MUTATING` or `DESTRUCTIVE` SQL (DROP, DELETE, UPDATE, ALTER).
-* **Streamlit Dashboard Interface**: Modern, interactive UI with security authentication gate (`APP_ACCESS_KEY`), session management, workspace explorer, and interactive human approval widgets.
+* **SvelteKit + ASP.NET Core UI/API**: The compiled frontend and API share one public origin and one local host port.
 
 ---
 
@@ -40,29 +40,43 @@ Application-Level Python Restriction
 
 ## 🏗️ Architecture Overview
 
-P07 is a hardened, multi-service enterprise workstation agent with a single public application endpoint:
+P07 uses one public application endpoint with private internal services:
 
 ```text
-[ Browser / Frontend (SvelteKit + TypeScript) ]
+Browser
+   │
+   │ HTTPS
+   ▼
+Cloudflare
+   │
+   │ cloudflared tunnel
+   ▼
+127.0.0.1:8007
+   │
+   ▼
+┌──────────────────────────────────────────┐
+│ p07-api                                  │
+│ ASP.NET Core + compiled SvelteKit SPA    │
+│ container :8080 → host 127.0.0.1:8007  │
+└───────────────────┬──────────────────────┘
+                    │
+                    │ private Docker network
+                    ▼
+          ┌──────────────────────┐
+          │ p07-agent-runtime    │
+          │ FastAPI :8001        │
+          └──────────┬───────────┘
                      │
-                     ▼ HTTPS (Port 443 / Cloudflare Tunnel)
-[ Public Ingress / Host Port 8007 ]
-                     │
-                     ▼ Internal Network
-[ ASP.NET Core Web API (P07.Api) ]
-       │                                │
-       │ (Internal Service Key Auth)    │ (Static Read-Only Swagger & MCP Docs)
-       ▼                                ▼
-[ Python Agent Runtime (FastAPI) ]   [ Read-Only Documentation Tabs ]
-       │
-       │ (JSON-RPC Protocol)
-       ▼
-[ Custom Python MCP Server ]
-       │
-       ├── Filesystem Sandbox (/app/workspace)
-       ├── SQLite Engine & SQL Guard (app_data.db)
-       └── Python Execution Subprocess (Sanitized Environment)
+                     ▼
+          ┌──────────────────────┐
+          │ p07-mcp              │
+          │ FastAPI/MCP :8002    │
+          └──────────────────────┘
 ```
+
+Only `127.0.0.1:8007` is published on the host. Agent Runtime and MCP ports are not host-published.
+
+Swagger and MCP documentation are exposed through read-only frontend tabs from the same public origin; the underlying Agent/MCP services remain private.
 
 ### Shared Portfolio Documentation
 All architectural specifications, deployment runbooks, and migration plans for P07 are maintained centrally in the shared portfolio documentation repository:
@@ -111,60 +125,54 @@ Execution Steps:
 
 ## 🚀 Quickstart Guide
 
-### 1. Installation
+### 1. Environment Configuration
 
-Clone the repository and install dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-### 2. Environment Configuration
-
-Copy `.env.example` to `.env`:
+Copy `.env.example` to `.env` and configure runtime values:
 
 ```bash
 cp .env.example .env
 ```
 
-Example `.env`:
-```ini
-APP_ACCESS_KEY=admin123
-AI_PROVIDER=openai
-OPENAI_API_KEY=your_openai_api_key_here
-GEMINI_API_KEY=your_gemini_api_key_here
-WORKSPACE_DIR=workspace
-MAX_PYTHON_TIMEOUT_SECONDS=10
-REQUIRE_HUMAN_CONFIRMATION_FOR_MUTATION=true
-```
+Secrets are injected at runtime and are not committed to Git.
 
-### 3. Running the Web Application
+### 3. Running the Application
 
-#### Option A: Direct Local Execution
-Launch the Streamlit interface:
-
-```bash
-streamlit run app.py
-```
-
-Open `http://localhost:8501`, log in using your `APP_ACCESS_KEY` (`admin123`), explore the workspace, execute agent tasks, and manage human confirmation requests!
-
-#### Option B: Containerized Deployment (Docker Compose)
-Launch the containerized stack with persistent workspace storage:
+Launch the production multi-service stack:
 
 ```bash
 docker compose up -d
 ```
 
-Service is exposed locally at `http://127.0.0.1:8007`; Cloudflare Tunnel should target `http://127.0.0.1:8007`. The ASP.NET Core container serves both the API and the compiled SvelteKit frontend.
+The single public application endpoint is:
 
-For detailed production infrastructure runbooks, consult the shared P07 deployment documentation outside this repository.
+```text
+http://127.0.0.1:8007
+```
+
+Configure Cloudflare Tunnel to target exactly:
+
+```text
+http://127.0.0.1:8007
+```
+
+The ASP.NET Core container serves both the compiled SvelteKit frontend and the API. Agent Runtime and MCP remain private inside the Docker network.
+
+For frontend-only development:
+
+```bash
+cd frontend
+npm ci
+npm run check
+npm run dev
+```
+
+Production traffic does not use the frontend development server.
 
 ---
 
 ## 🧪 Running Automated Tests
 
-### 1. Existing Streamlit & Core Domain Suite
+### 1. Legacy regression suite
 ```bash
 pytest tests/ -v
 ```
@@ -183,6 +191,12 @@ PYTHONPATH=agent-runtime pytest agent-runtime/tests/ -v
 ```bash
 PYTHONPATH=mcp-server pytest mcp-server/tests/ -v
 ```
+
+---
+
+## 🔄 Legacy Migration Status
+
+The original Streamlit implementation is retained temporarily for regression coverage while the production architecture migrates to the SvelteKit + ASP.NET Core + Agent Runtime + MCP stack. Legacy components should be retired only after dependency/reference analysis and a passing CI migration gate.
 
 ---
 

@@ -53,3 +53,17 @@ workspace/*
 *.swo
 .DS_Store
 Thumbs.db
+
+# Node / frontend artifacts
+node_modules/
+.svelte-kit/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# .NET build artifacts
+**/bin/
+**/obj/
+**/.vs/
+*.user
+*.suo

@@ -24,7 +24,6 @@ services:
       - ASPNETCORE_URLS=http://+:8080
       - AgentRuntime__BaseUrl=http://p07-agent-runtime:8001
       - AgentRuntime__InternalServiceKey=${INTERNAL_SERVICE_KEY:-p07_production_service_key}
-      - Frontend__Url=http://127.0.0.1:8007
     depends_on:
       p07-agent-runtime:
         condition: service_healthy

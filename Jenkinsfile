@@ -3,14 +3,15 @@ pipeline {
 
     parameters {
         string(name: 'DOCKERHUB_USERNAME', defaultValue: 'knightprime007', description: 'Docker Hub Registry Namespace')
-        string(name: 'OCI_HOST', defaultValue: 'agent.vaikuntrix.in', description: 'Target Public Ingress Hostname')
-                string(name: 'API_IMAGE_NAME', defaultValue: 'p07-api', description: 'ASP.NET Core API Image Name')
-        string(name: 'AGENT_IMAGE_NAME', defaultValue: 'p07-agent-runtime', description: 'Python Agent Runtime Image Name')
-        string(name: 'MCP_IMAGE_NAME', defaultValue: 'p07-mcp', description: 'MCP Server Image Name')
+        string(name: 'OCI_HOST', defaultValue: 'agent.vaikuntrix.in', description: 'Target Public Hostname')
+        string(name: 'API_IMAGE_NAME', defaultValue: 'p07-api', description: 'ASP.NET Core API + frontend image name')
+        string(name: 'AGENT_IMAGE_NAME', defaultValue: 'p07-agent-runtime', description: 'Python Agent Runtime image name')
+        string(name: 'MCP_IMAGE_NAME', defaultValue: 'p07-mcp', description: 'MCP Server image name')
     }
 
     environment {
-        GIT_SHA = "${env.GIT_COMMIT ? env.GIT_COMMIT.take(7) : error('GIT_COMMIT is missing; immutable Git SHA tag is required')}"        API_TAG = "${params.DOCKERHUB_USERNAME}/${params.API_IMAGE_NAME}:${env.GIT_SHA}"
+        GIT_SHA = "${env.GIT_COMMIT ? env.GIT_COMMIT.take(7) : error('GIT_COMMIT is missing; immutable Git SHA tag is required')}"
+        API_TAG = "${params.DOCKERHUB_USERNAME}/${params.API_IMAGE_NAME}:${env.GIT_SHA}"
         API_LATEST = "${params.DOCKERHUB_USERNAME}/${params.API_IMAGE_NAME}:latest"
         AGENT_TAG = "${params.DOCKERHUB_USERNAME}/${params.AGENT_IMAGE_NAME}:${env.GIT_SHA}"
         AGENT_LATEST = "${params.DOCKERHUB_USERNAME}/${params.AGENT_IMAGE_NAME}:latest"
@@ -44,7 +45,7 @@ pipeline {
         stage('Test & Quality Gates') {
             steps {
                 script {
-                    echo "1/4: Running Python legacy regression and subsystem tests..."
+                    echo "1/3: Running Python legacy regression and subsystem tests..."
                     sh '''
                         docker run --rm -v "${WORKSPACE}:/app" -w /app python:3.12-slim sh -c "
                             pip install --no-cache-dir -r requirements.txt &&
@@ -60,14 +61,14 @@ pipeline {
                         "
                     '''
 
-                    echo "2/4: Running ASP.NET Core Backend Tests..."
+                    echo "2/3: Running ASP.NET Core Backend Tests..."
                     sh '''
                         docker run --rm -v "${WORKSPACE}:/app" -w /app mcr.microsoft.com/dotnet/sdk:10.0-preview sh -c "
                             dotnet test backend/P07.Tests/P07.Tests.csproj -c Release
                         "
                     '''
 
-                    echo "3/4: Running SvelteKit Frontend Type Checks and Build..."
+                    echo "3/3: Running SvelteKit Frontend Type Checks and Build..."
                     sh '''
                         docker run --rm -v "${WORKSPACE}:/app" -w /app/frontend node:22-alpine sh -c "
                             npm ci &&
@@ -83,7 +84,8 @@ pipeline {
             steps {
                 script {
                     echo "Building production images for linux/arm64..."
-                    sh """                        docker buildx build --platform linux/arm64 -t ${API_TAG} -t ${API_LATEST} -f backend/Dockerfile . --load
+                    sh """
+                        docker buildx build --platform linux/arm64 -t ${API_TAG} -t ${API_LATEST} -f backend/Dockerfile . --load
                         docker buildx build --platform linux/arm64 -t ${AGENT_TAG} -t ${AGENT_LATEST} -f agent-runtime/Dockerfile agent-runtime/ --load
                         docker buildx build --platform linux/arm64 -t ${MCP_TAG} -t ${MCP_LATEST} -f mcp-server/Dockerfile mcp-server/ --load
                     """
@@ -94,7 +96,8 @@ pipeline {
         stage('Container Security Scan') {
             steps {
                 script {
-                    echo "Scanning container images with Trivy..."                    sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --severity HIGH,CRITICAL --exit-code 1 ${API_TAG}"
+                    echo "Scanning container images with Trivy..."
+                    sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --severity HIGH,CRITICAL --exit-code 1 ${API_TAG}"
                     sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --severity HIGH,CRITICAL --exit-code 1 ${AGENT_TAG}"
                     sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --severity HIGH,CRITICAL --exit-code 1 ${MCP_TAG}"
                 }
@@ -106,7 +109,8 @@ pipeline {
                 script {
                     echo "Publishing immutable container images to Docker Hub..."
                     withCredentials([usernamePassword(credentialsId: DOCKERHUB_CRED_ID, usernameVariable: 'DH_USER', passwordVariable: 'DH_PASS')]) {
-                        sh 'echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin'                        sh "docker push ${API_TAG} && docker push ${API_LATEST}"
+                        sh 'echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin'
+                        sh "docker push ${API_TAG} && docker push ${API_LATEST}"
                         sh "docker push ${AGENT_TAG} && docker push ${AGENT_LATEST}"
                         sh "docker push ${MCP_TAG} && docker push ${MCP_LATEST}"
                     }
@@ -123,11 +127,15 @@ pipeline {
                             echo "ERROR: Production environment file /opt/projects/autonomous-workspace-agent/.env not found on deployment host!"
                             exit 1
                         fi
-                        cp docker-compose.yml /opt/projects/autonomous-workspace-agent/docker-compose.yml                        P07_API_IMAGE="${API_TAG}" \
+
+                        cp docker-compose.yml /opt/projects/autonomous-workspace-agent/docker-compose.yml
+
+                        P07_API_IMAGE="${API_TAG}" \
                         P07_AGENT_IMAGE="${AGENT_TAG}" \
                         P07_MCP_IMAGE="${MCP_TAG}" \
                         docker compose --env-file /opt/projects/autonomous-workspace-agent/.env -f /opt/projects/autonomous-workspace-agent/docker-compose.yml pull
-                        P07_P07_API_IMAGE="${API_TAG}" \
+
+                        P07_API_IMAGE="${API_TAG}" \
                         P07_AGENT_IMAGE="${AGENT_TAG}" \
                         P07_MCP_IMAGE="${MCP_TAG}" \
                         docker compose --env-file /opt/projects/autonomous-workspace-agent/.env -f /opt/projects/autonomous-workspace-agent/docker-compose.yml up -d
@@ -143,35 +151,36 @@ pipeline {
                         MAX_ATTEMPTS=20
                         SLEEP_SECONDS=2
                         CURL_TIMEOUT=2
-                        INGRESS_HEALTH_URL="http://127.0.0.1:8007/health"
+                        P07_HEALTH_URL="http://127.0.0.1:8007/health"
                         API_HEALTH_URL="http://127.0.0.1:8007/api/v1/health"
 
-                        echo "Layer 1 Verification: Ingress Gateway readiness check (\$INGRESS_HEALTH_URL)..."
+                        echo "Layer 1 Verification: P07 local endpoint readiness ($P07_HEALTH_URL)..."
                         ATTEMPT=1
                         SUCCESS=0
 
-                        while [ \$ATTEMPT -le \$MAX_ATTEMPTS ]; do
-                            HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" --max-time "\$CURL_TIMEOUT" "\$INGRESS_HEALTH_URL") || HTTP_CODE="000"
-                            if [ "\$HTTP_CODE" = "200" ]; then
-                                echo "[Attempt \$ATTEMPT/\$MAX_ATTEMPTS] Layer 1 Ingress Healthcheck: PASS (HTTP 200 OK)"
+                        while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+                            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time "$CURL_TIMEOUT" "$P07_HEALTH_URL") || HTTP_CODE="000"
+                            if [ "$HTTP_CODE" = "200" ]; then
+                                echo "[Attempt $ATTEMPT/$MAX_ATTEMPTS] P07 endpoint healthcheck: PASS (HTTP 200 OK)"
                                 SUCCESS=1
                                 break
                             else
-                                echo "[Attempt \$ATTEMPT/\$MAX_ATTEMPTS] Ingress starting up (HTTP \$HTTP_CODE). Retrying..."
-                                sleep "\$SLEEP_SECONDS"
-                                ATTEMPT=\$((ATTEMPT + 1))
+                                echo "[Attempt $ATTEMPT/$MAX_ATTEMPTS] P07 starting up (HTTP $HTTP_CODE). Retrying..."
+                                sleep "$SLEEP_SECONDS"
+                                ATTEMPT=$((ATTEMPT + 1))
                             fi
                         done
 
-                        if [ \$SUCCESS -ne 1 ]; then
-                            echo "ERROR: Layer 1 Ingress readiness check failed after \$MAX_ATTEMPTS attempts against \$INGRESS_HEALTH_URL (Status: \$HTTP_CODE)!"
+                        if [ $SUCCESS -ne 1 ]; then
+                            echo "ERROR: P07 endpoint readiness check failed after $MAX_ATTEMPTS attempts against $P07_HEALTH_URL (Status: $HTTP_CODE)!"
                             exit 1
                         fi
 
-                        echo "Layer 1b Verification: ASP.NET Core API through Ingress readiness check (\$API_HEALTH_URL)..."
-                        API_CODE=\$(curl -s -o /dev/null -w "%{http_code}" --max-time "\$CURL_TIMEOUT" "\$API_HEALTH_URL") || API_CODE="000"
-                        if [ "\$API_CODE" != "200" ]; then
-                            echo "WARNING: Backend API health check returned HTTP \$API_CODE at \$API_HEALTH_URL"
+                        echo "Layer 1b Verification: ASP.NET Core API health through same public endpoint ($API_HEALTH_URL)..."
+                        API_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time "$CURL_TIMEOUT" "$API_HEALTH_URL") || API_CODE="000"
+                        if [ "$API_CODE" != "200" ]; then
+                            echo "ERROR: Backend API health check returned HTTP $API_CODE at $API_HEALTH_URL"
+                            exit 1
                         else
                             echo "Layer 1b API Healthcheck: PASS (HTTP 200 OK)"
                         fi
@@ -185,13 +194,13 @@ pipeline {
                         fi
 
                         echo "Layer 3 Verification: Public HTTPS route (https://${params.OCI_HOST})..."
-                        HTTP_STATUS=\$(curl -o /dev/null -s -w "%{http_code}" --max-time 10 https://${params.OCI_HOST} || echo "CURL_ERROR")
-                        if [ "\$HTTP_STATUS" = "200" ]; then
+                        HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" --max-time 10 https://${params.OCI_HOST} || echo "CURL_ERROR")
+                        if [ "$HTTP_STATUS" = "200" ]; then
                             echo "Public Cloudflare route: PASS (HTTP 200 OK)"
-                        elif [ "\$HTTP_STATUS" = "503" ] || [ "\$HTTP_STATUS" = "403" ]; then
-                            echo "Public Cloudflare route: CHALLENGED (Cloudflare Under Attack Mode Active — HTTP \$HTTP_STATUS. Deployment Healthy)."
+                        elif [ "$HTTP_STATUS" = "503" ] || [ "$HTTP_STATUS" = "403" ]; then
+                            echo "Public Cloudflare route: CHALLENGED (Cloudflare Under Attack Mode Active — HTTP $HTTP_STATUS. Deployment Healthy)."
                         else
-                            echo "ERROR: Public Cloudflare route failed with status \$HTTP_STATUS"
+                            echo "ERROR: Public Cloudflare route failed with status $HTTP_STATUS"
                             exit 1
                         fi
                     """
