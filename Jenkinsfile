@@ -52,19 +52,15 @@ pipeline {
         stage('Test & Quality Gates') {
             steps {
                 script {
-                    echo "1/3: Running Python legacy regression and subsystem tests..."
+                    echo "1/3: Running Python Agent Runtime and MCP tests..."
                     sh '''
-                        docker run --rm -v "${WORKSPACE}:/app" -w /app python:3.12-slim sh -c "
+                        docker run --rm -v "${WORKSPACE}:/app" -w /app/agent-runtime python:3.12-slim sh -c "
                             pip install --no-cache-dir -r requirements.txt &&
-                            pytest tests/ -v
+                            PYTHONPATH=/app pytest tests/ -v
                         "
                         docker run --rm -v "${WORKSPACE}:/app" -w /app/mcp-server python:3.12-slim sh -c "
                             pip install --no-cache-dir -r requirements.txt &&
-                            pytest tests/ -v
-                        "
-                        docker run --rm -v "${WORKSPACE}:/app" -w /app/agent-runtime python:3.12-slim sh -c "
-                            pip install --no-cache-dir -r requirements.txt &&
-                            pytest tests/ -v
+                            PYTHONPATH=/app pytest tests/ -v
                         "
                     '''
 
