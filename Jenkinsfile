@@ -10,13 +10,6 @@ pipeline {
     }
 
     environment {
-        GIT_SHA = "${env.GIT_COMMIT ? env.GIT_COMMIT.take(7) : error('GIT_COMMIT is missing; immutable Git SHA tag is required')}"
-        API_TAG = "${params.DOCKERHUB_USERNAME}/${params.API_IMAGE_NAME}:${env.GIT_SHA}"
-        API_LATEST = "${params.DOCKERHUB_USERNAME}/${params.API_IMAGE_NAME}:latest"
-        AGENT_TAG = "${params.DOCKERHUB_USERNAME}/${params.AGENT_IMAGE_NAME}:${env.GIT_SHA}"
-        AGENT_LATEST = "${params.DOCKERHUB_USERNAME}/${params.AGENT_IMAGE_NAME}:latest"
-        MCP_TAG = "${params.DOCKERHUB_USERNAME}/${params.MCP_IMAGE_NAME}:${env.GIT_SHA}"
-        MCP_LATEST = "${params.DOCKERHUB_USERNAME}/${params.MCP_IMAGE_NAME}:latest"
         DOCKERHUB_CRED_ID = 'docker-hub-credentials'
     }
 
@@ -29,7 +22,21 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
-                echo "Checked out commit: ${env.GIT_COMMIT} (Short SHA: ${env.GIT_SHA})"
+                script {
+                    if (!env.GIT_COMMIT?.trim()) {
+                        error('GIT_COMMIT is missing; immutable Git SHA tag is required')
+                    }
+
+                    env.GIT_SHA = env.GIT_COMMIT.take(7)
+                    env.API_TAG = "${params.DOCKERHUB_USERNAME}/${params.API_IMAGE_NAME}:${env.GIT_SHA}"
+                    env.API_LATEST = "${params.DOCKERHUB_USERNAME}/${params.API_IMAGE_NAME}:latest"
+                    env.AGENT_TAG = "${params.DOCKERHUB_USERNAME}/${params.AGENT_IMAGE_NAME}:${env.GIT_SHA}"
+                    env.AGENT_LATEST = "${params.DOCKERHUB_USERNAME}/${params.AGENT_IMAGE_NAME}:latest"
+                    env.MCP_TAG = "${params.DOCKERHUB_USERNAME}/${params.MCP_IMAGE_NAME}:${env.GIT_SHA}"
+                    env.MCP_LATEST = "${params.DOCKERHUB_USERNAME}/${params.MCP_IMAGE_NAME}:latest"
+
+                    echo "Checked out commit: ${env.GIT_COMMIT} (Short SHA: ${env.GIT_SHA})"
+                }
             }
         }
 

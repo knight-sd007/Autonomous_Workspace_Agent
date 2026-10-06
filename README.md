@@ -114,7 +114,7 @@ Execution Steps:
 1. Agent selects tool `delete_file` with `file_path="obsolete_file.py"`.
 2. Permission Gate evaluates action -> PermissionLevel.DESTRUCTIVE / `is_destructive=True`.
 3. Execution pauses; Orchestrator returns status `NEEDS_CONFIRMATION` payload.
-4. Streamlit UI renders alert: "⚠️ HUMAN CONFIRMATION REQUIRED FOR DESTRUCTIVE ACTION: delete_file on obsolete_file.py".
+4. Frontend renders alert: "⚠️ HUMAN CONFIRMATION REQUIRED FOR DESTRUCTIVE ACTION: delete_file on obsolete_file.py".
 5. User reviews request and clicks "✅ Approve & Execute Action".
 6. Orchestrator executes tool with `user_confirmed=True`.
 7. Workspace Sandbox unlinks target file inside workspace boundary.
@@ -172,31 +172,28 @@ Production traffic does not use the frontend development server.
 
 ## 🧪 Running Automated Tests
 
-### 1. Legacy regression suite
-```bash
-pytest tests/ -v
-```
-
-### 2. ASP.NET Core Backend Test Suite (.NET 10)
-```bash
-cd backend && dotnet test
-```
-
-### 3. Python Agent Runtime Suite
+### 1. Python Agent Runtime Suite
 ```bash
 PYTHONPATH=agent-runtime pytest agent-runtime/tests/ -v
 ```
 
-### 4. Custom MCP Server Suite
+### 2. Custom MCP Server Suite
 ```bash
 PYTHONPATH=mcp-server pytest mcp-server/tests/ -v
 ```
 
----
+### 3. ASP.NET Core Backend Test Suite (.NET 10)
+```bash
+cd backend && dotnet test
+```
 
-## 🔄 Legacy Migration Status
-
-The original Streamlit implementation is retained temporarily for regression coverage while the production architecture migrates to the SvelteKit + ASP.NET Core + Agent Runtime + MCP stack. Legacy components should be retired only after dependency/reference analysis and a passing CI migration gate.
+### 4. SvelteKit Frontend Checks
+```bash
+cd frontend
+npm ci
+npm run check
+npm run build
+```
 
 ---
 
@@ -204,5 +201,5 @@ The original Streamlit implementation is retained temporarily for regression cov
 
 * **Application-Level Python Isolation**: Python execution is governed by process timeouts and workspace directory confinement. It is NOT an OS-level kernel sandbox or containerized execution environment (Docker/seccomp/cgroups).
 * **Local Single-User Scope**: Designed for local developer workstation assistance. Multi-tenant deployment would require containerized sandboxing per tenant.
-* **Ephemeral Confirmation State**: Human approval state in the Streamlit web interface is held in user session state memory and is ephemeral per session.
+* **Ephemeral Confirmation State**: Human approval state is held in runtime memory and is not a durable approval/audit store.
 * **TOCTOU Symlink Limitation**: File operations use standard Python filesystem primitives; a theoretical Time-of-Check to Time-of-Use symlink race exists under unprivileged local file execution.
