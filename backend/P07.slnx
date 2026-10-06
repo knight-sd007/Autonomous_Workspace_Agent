@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="P07.Api/P07.Api.csproj" />
+  <Project Path="P07.Application/P07.Application.csproj" />
+  <Project Path="P07.Domain/P07.Domain.csproj" />
+  <Project Path="P07.Infrastructure/P07.Infrastructure.csproj" />
+  <Project Path="P07.Tests/P07.Tests.csproj" />
+</Solution>

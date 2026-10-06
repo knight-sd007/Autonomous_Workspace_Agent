@@ -1,0 +1,144 @@
+# ==============================================================================
+# Docker Compose Manifest for Autonomous Workspace Agent (P07)
+# Production Containerized Multi-Service Architecture
+# ==============================================================================
+
+services:
+  # Ingress Gateway & SvelteKit Static SPA
+  p07-ingress:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: ${P07_INGRESS_IMAGE:-knightprime007/p07-ingress:latest}
+    container_name: p07-ingress
+    restart: unless-stopped
+    ports:
+      # ONLY host port 8007 published for Cloudflare Tunnel ingress
+      - "${P07_HOST_PORT:-8007}:80"
+    depends_on:
+      p07-api:
+        condition: service_healthy
+    networks:
+      - p07-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ASP.NET Core 10 Web API Backend
+  p07-api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: ${P07_API_IMAGE:-knightprime007/p07-api:latest}
+    container_name: p07-api
+    restart: unless-stopped
+    expose:
+      - "8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - AgentRuntime__BaseUrl=http://p07-agent-runtime:8001
+      - AgentRuntime__InternalServiceKey=${INTERNAL_SERVICE_KEY:-p07_production_service_key}
+      - Frontend__Url=http://127.0.0.1:8007
+    depends_on:
+      p07-agent-runtime:
+        condition: service_healthy
+    networks:
+      - p07-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Python Agent Runtime Service
+  p07-agent-runtime:
+    build:
+      context: ./agent-runtime
+      dockerfile: Dockerfile
+    image: ${P07_AGENT_IMAGE:-knightprime007/p07-agent-runtime:latest}
+    container_name: p07-agent-runtime
+    restart: unless-stopped
+    expose:
+      - "8001"
+    environment:
+      - INTERNAL_SERVICE_KEY=${INTERNAL_SERVICE_KEY:-p07_production_service_key}
+      - MCP_SERVER_URL=http://p07-mcp:8002
+      - WORKSPACE_DIR=/workspace
+      - DEFAULT_PROVIDER=${AI_PROVIDER:-offline}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_CHAT_MODEL:-gpt-4o-mini}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_CHAT_MODEL:-gemini-2.5-flash}
+      - REQUIRE_HUMAN_CONFIRMATION_FOR_MUTATION=true
+      - MAX_PYTHON_TIMEOUT_SECONDS=10
+    volumes:
+      - p07_workspace_data:/workspace
+    depends_on:
+      p07-mcp:
+        condition: service_healthy
+    networks:
+      - p07-net
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Custom MCP Server Service
+  p07-mcp:
+    build:
+      context: ./mcp-server
+      dockerfile: Dockerfile
+    image: ${P07_MCP_IMAGE:-knightprime007/p07-mcp:latest}
+    container_name: p07-mcp
+    restart: unless-stopped
+    expose:
+      - "8002"
+    environment:
+      - INTERNAL_SERVICE_KEY=${INTERNAL_SERVICE_KEY:-p07_production_service_key}
+      - WORKSPACE_DIR=/workspace
+    volumes:
+      - p07_workspace_data:/workspace
+    networks:
+      - p07-net
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  p07-net:
+    name: p07-net
+    driver: bridge
+
+volumes:
+  p07_workspace_data:
+    name: p07_workspace_data

@@ -1,0 +1,55 @@
+# Git and version control
+.git
+.gitignore
+.github
+
+# Environment files and credentials
+.env
+.env.*
+*.pem
+*.key
+.streamlit/secrets.toml
+
+# Python artifacts and caches
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+
+# Tests, documentation, and CI manifests
+tests/
+docs/
+*.md
+Jenkinsfile*
+
+# Workspace runtime data
+workspace/*
+
+# IDE and OS files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

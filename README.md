@@ -40,33 +40,36 @@ Application-Level Python Restriction
 
 ## 🏗️ Architecture Overview
 
+P07 is evolving from a standalone Streamlit application into a hardened, multi-tier enterprise workstation agent:
+
 ```text
-User Directive
-      │
-      ▼
-Streamlit UI (APP_ACCESS_KEY Auth Gate)
-      │
-      ▼
-Agent Orchestrator (LLM Tool Calling Loop)
-      │
-      ▼
-Permission Gate & SQL Guard (Evaluates Action Risk & Mutation Status)
-      │
-      ├── Low-Risk (READ) ──────────────────┐
-      └── High-Risk / Mutation / Delete ────┤
-                                            ▼
-                                Human-in-the-Loop Gate
-                                (Pauses execution for user UI approval)
-                                            │
-                                            ▼
-                                    Workspace Sandbox
-                         (Strict root path resolution & boundary check)
-                                            │
-                        ┌───────────────────┴───────────────────┐
-                        ▼                                       ▼
-             Filesystem Operations                     Python Subprocess / SQLite Engine
-           (list, read, write, delete)                 (Timeout & directory restricted)
+[ Browser / Frontend (SvelteKit + TypeScript) ]
+                     │
+                     ▼ HTTPS (Port 443 / Cloudflare Tunnel)
+[ Public Ingress / Host Port 8007 ]
+                     │
+                     ▼ Internal Network
+[ ASP.NET Core Web API (P07.Api) ]
+       │                                │
+       │ (Internal Service Key Auth)    │ (Static Read-Only Swagger & MCP Docs)
+       ▼                                ▼
+[ Python Agent Runtime (FastAPI) ]   [ Read-Only Documentation Tabs ]
+       │
+       │ (JSON-RPC Protocol)
+       ▼
+[ Custom Python MCP Server ]
+       │
+       ├── Filesystem Sandbox (/app/workspace)
+       ├── SQLite Engine & SQL Guard (app_data.db)
+       └── Python Execution Subprocess (Sanitized Environment)
 ```
+
+### Shared Portfolio Documentation
+All architectural specifications, deployment runbooks, and migration plans for P07 are maintained centrally in the shared portfolio documentation repository:
+
+* **Architecture Specifications:** `docs/P07/ARCHITECTURE.md` (Shared location: `/mnt/f/Portfolios/docs/P07/ARCHITECTURE.md`)
+* **Deployment Runbook:** `docs/P07/DEPLOYMENT.md` (Shared location: `/mnt/f/Portfolios/docs/P07/DEPLOYMENT.md`)
+* **Migration Plan:** `docs/P07/MIGRATION_PLAN.md` (Shared location: `/mnt/f/Portfolios/docs/P07/MIGRATION_PLAN.md`)
 
 ---
 
@@ -137,6 +140,7 @@ REQUIRE_HUMAN_CONFIRMATION_FOR_MUTATION=true
 
 ### 3. Running the Web Application
 
+#### Option A: Direct Local Execution
 Launch the Streamlit interface:
 
 ```bash
@@ -145,23 +149,40 @@ streamlit run app.py
 
 Open `http://localhost:8501`, log in using your `APP_ACCESS_KEY` (`admin123`), explore the workspace, execute agent tasks, and manage human confirmation requests!
 
+#### Option B: Containerized Deployment (Docker Compose)
+Launch the containerized stack with persistent workspace storage:
+
+```bash
+docker compose up -d
+```
+
+Service will be accessible at `http://localhost:8007` (mapped to internal container port 8501).
+
+For detailed production infrastructure runbooks, consult [docs/P07/DEPLOYMENT.md](../docs/P07/DEPLOYMENT.md) in the portfolio documentation directory.
+
 ---
 
-## 🧪 Running Unit Tests
+## 🧪 Running Automated Tests
 
-Run the complete test suite using `pytest` or `unittest`:
-
+### 1. Existing Streamlit & Core Domain Suite
 ```bash
-python3 -m unittest discover -s tests -p "test_*.py"
+pytest tests/ -v
 ```
 
-Or:
-
+### 2. ASP.NET Core Backend Test Suite (.NET 10)
 ```bash
-pytest tests/
+cd backend && dotnet test
 ```
 
-Expect 100% pass rate (19/19 tests passing).
+### 3. Python Agent Runtime Suite
+```bash
+PYTHONPATH=agent-runtime pytest agent-runtime/tests/ -v
+```
+
+### 4. Custom MCP Server Suite
+```bash
+PYTHONPATH=mcp-server pytest mcp-server/tests/ -v
+```
 
 ---
 
