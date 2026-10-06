@@ -4,17 +4,13 @@ pipeline {
     parameters {
         string(name: 'DOCKERHUB_USERNAME', defaultValue: 'knightprime007', description: 'Docker Hub Registry Namespace')
         string(name: 'OCI_HOST', defaultValue: 'agent.vaikuntrix.in', description: 'Target Public Ingress Hostname')
-        string(name: 'INGRESS_IMAGE_NAME', defaultValue: 'p07-ingress', description: 'Ingress Gateway Image Name')
-        string(name: 'API_IMAGE_NAME', defaultValue: 'p07-api', description: 'ASP.NET Core API Image Name')
+                string(name: 'API_IMAGE_NAME', defaultValue: 'p07-api', description: 'ASP.NET Core API Image Name')
         string(name: 'AGENT_IMAGE_NAME', defaultValue: 'p07-agent-runtime', description: 'Python Agent Runtime Image Name')
         string(name: 'MCP_IMAGE_NAME', defaultValue: 'p07-mcp', description: 'MCP Server Image Name')
     }
 
     environment {
-        GIT_SHA = "${env.GIT_COMMIT ? env.GIT_COMMIT.take(7) : error('GIT_COMMIT is missing; immutable Git SHA tag is required')}"
-        INGRESS_TAG = "${params.DOCKERHUB_USERNAME}/${params.INGRESS_IMAGE_NAME}:${env.GIT_SHA}"
-        INGRESS_LATEST = "${params.DOCKERHUB_USERNAME}/${params.INGRESS_IMAGE_NAME}:latest"
-        API_TAG = "${params.DOCKERHUB_USERNAME}/${params.API_IMAGE_NAME}:${env.GIT_SHA}"
+        GIT_SHA = "${env.GIT_COMMIT ? env.GIT_COMMIT.take(7) : error('GIT_COMMIT is missing; immutable Git SHA tag is required')}"        API_TAG = "${params.DOCKERHUB_USERNAME}/${params.API_IMAGE_NAME}:${env.GIT_SHA}"
         API_LATEST = "${params.DOCKERHUB_USERNAME}/${params.API_IMAGE_NAME}:latest"
         AGENT_TAG = "${params.DOCKERHUB_USERNAME}/${params.AGENT_IMAGE_NAME}:${env.GIT_SHA}"
         AGENT_LATEST = "${params.DOCKERHUB_USERNAME}/${params.AGENT_IMAGE_NAME}:latest"
@@ -86,10 +82,8 @@ pipeline {
         stage('Build ARM64 Images') {
             steps {
                 script {
-                    echo "Building multi-container production images for linux/arm64..."
-                    sh """
-                        docker buildx build --platform linux/arm64 -t ${INGRESS_TAG} -t ${INGRESS_LATEST} -f frontend/Dockerfile frontend/ --load
-                        docker buildx build --platform linux/arm64 -t ${API_TAG} -t ${API_LATEST} -f backend/Dockerfile backend/ --load
+                    echo "Building production images for linux/arm64..."
+                    sh """                        docker buildx build --platform linux/arm64 -t ${API_TAG} -t ${API_LATEST} -f backend/Dockerfile . --load
                         docker buildx build --platform linux/arm64 -t ${AGENT_TAG} -t ${AGENT_LATEST} -f agent-runtime/Dockerfile agent-runtime/ --load
                         docker buildx build --platform linux/arm64 -t ${MCP_TAG} -t ${MCP_LATEST} -f mcp-server/Dockerfile mcp-server/ --load
                     """
@@ -100,9 +94,7 @@ pipeline {
         stage('Container Security Scan') {
             steps {
                 script {
-                    echo "Scanning container images with Trivy..."
-                    sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --severity HIGH,CRITICAL --exit-code 1 ${INGRESS_TAG}"
-                    sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --severity HIGH,CRITICAL --exit-code 1 ${API_TAG}"
+                    echo "Scanning container images with Trivy..."                    sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --severity HIGH,CRITICAL --exit-code 1 ${API_TAG}"
                     sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --severity HIGH,CRITICAL --exit-code 1 ${AGENT_TAG}"
                     sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --severity HIGH,CRITICAL --exit-code 1 ${MCP_TAG}"
                 }
@@ -114,9 +106,7 @@ pipeline {
                 script {
                     echo "Publishing immutable container images to Docker Hub..."
                     withCredentials([usernamePassword(credentialsId: DOCKERHUB_CRED_ID, usernameVariable: 'DH_USER', passwordVariable: 'DH_PASS')]) {
-                        sh 'echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin'
-                        sh "docker push ${INGRESS_TAG} && docker push ${INGRESS_LATEST}"
-                        sh "docker push ${API_TAG} && docker push ${API_LATEST}"
+                        sh 'echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin'                        sh "docker push ${API_TAG} && docker push ${API_LATEST}"
                         sh "docker push ${AGENT_TAG} && docker push ${AGENT_LATEST}"
                         sh "docker push ${MCP_TAG} && docker push ${MCP_LATEST}"
                     }
@@ -133,14 +123,11 @@ pipeline {
                             echo "ERROR: Production environment file /opt/projects/autonomous-workspace-agent/.env not found on deployment host!"
                             exit 1
                         fi
-                        cp docker-compose.yml /opt/projects/autonomous-workspace-agent/docker-compose.yml
-                        P07_INGRESS_IMAGE="${INGRESS_TAG}" \
-                        P07_API_IMAGE="${API_TAG}" \
+                        cp docker-compose.yml /opt/projects/autonomous-workspace-agent/docker-compose.yml                        P07_API_IMAGE="${API_TAG}" \
                         P07_AGENT_IMAGE="${AGENT_TAG}" \
                         P07_MCP_IMAGE="${MCP_TAG}" \
                         docker compose --env-file /opt/projects/autonomous-workspace-agent/.env -f /opt/projects/autonomous-workspace-agent/docker-compose.yml pull
-                        P07_INGRESS_IMAGE="${INGRESS_TAG}" \
-                        P07_API_IMAGE="${API_TAG}" \
+                        P07_P07_API_IMAGE="${API_TAG}" \
                         P07_AGENT_IMAGE="${AGENT_TAG}" \
                         P07_MCP_IMAGE="${MCP_TAG}" \
                         docker compose --env-file /opt/projects/autonomous-workspace-agent/.env -f /opt/projects/autonomous-workspace-agent/docker-compose.yml up -d
@@ -157,7 +144,7 @@ pipeline {
                         SLEEP_SECONDS=2
                         CURL_TIMEOUT=2
                         INGRESS_HEALTH_URL="http://127.0.0.1:8007/health"
-                        API_HEALTH_URL="http://127.0.0.1:8007/api/health"
+                        API_HEALTH_URL="http://127.0.0.1:8007/api/v1/health"
 
                         echo "Layer 1 Verification: Ingress Gateway readiness check (\$INGRESS_HEALTH_URL)..."
                         ATTEMPT=1
@@ -230,7 +217,7 @@ pipeline {
             cleanWs(deleteDirs: true, notFailBuild: true)
         }
         success {
-            echo "Successfully built, tested, scanned, published, and deployed P07 commit ${env.GIT_SHA}!"
+            echo "Successfully built, tested, scanned, published, and deployed P07 commit ${env.GIT_SHA} with Cloudflare targeting 127.0.0.1:8007!"
         }
         failure {
             echo "Pipeline execution failed on commit ${env.GIT_COMMIT}."

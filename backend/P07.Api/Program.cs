@@ -21,40 +21,30 @@ builder.Services.AddSwaggerGen(c =>
 // Add Infrastructure & Application Services
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
-// Add CORS policy for SvelteKit frontend
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowFrontend", policy =>
-    {
-        policy.WithOrigins(
-            builder.Configuration["Frontend:Url"] ?? "http://localhost:5173",
-            "http://127.0.0.1:5173",
-            "http://localhost:8007",
-            "https://agent.vaikuntrix.in"
-        )
-        .AllowAnyHeader()
-        .AllowAnyMethod();
-    });
-});
-
 var app = builder.Build();
 
 // Global Exception Handler
 app.UseMiddleware<ErrorHandlingMiddleware>();
 
-// Enable Swagger UI (Documentation view)
+// Enable Swagger UI (documentation view).
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "P07 API v1");
     c.RoutePrefix = "swagger";
-    // Read-only settings
-    c.SupportedSubmitMethods(); // Disable "Try it out" execution in production compliance
+    // Read-only settings.
+    c.SupportedSubmitMethods();
 });
 
-app.UseCors("AllowFrontend");
+// The ASP.NET Core API and the compiled SvelteKit SPA share the same origin.
+// No CORS policy is required for the production frontend.
+app.UseDefaultFiles();
+app.UseStaticFiles();
 
 app.MapControllers();
+
+// SvelteKit SPA fallback for client-side routes such as /docs/swagger and /docs/mcp.
+app.MapFallbackToFile("index.html");
 
 app.Run();
 

@@ -40,7 +40,7 @@ Application-Level Python Restriction
 
 ## 🏗️ Architecture Overview
 
-P07 is evolving from a standalone Streamlit application into a hardened, multi-tier enterprise workstation agent:
+P07 is a hardened, multi-service enterprise workstation agent with a single public application endpoint:
 
 ```text
 [ Browser / Frontend (SvelteKit + TypeScript) ]
@@ -156,9 +156,9 @@ Launch the containerized stack with persistent workspace storage:
 docker compose up -d
 ```
 
-Service will be accessible at `http://localhost:8007` (mapped to internal container port 8501).
+Service is exposed locally at `http://127.0.0.1:8007`; Cloudflare Tunnel should target `http://127.0.0.1:8007`. The ASP.NET Core container serves both the API and the compiled SvelteKit frontend.
 
-For detailed production infrastructure runbooks, consult [docs/P07/DEPLOYMENT.md](../docs/P07/DEPLOYMENT.md) in the portfolio documentation directory.
+For detailed production infrastructure runbooks, consult the shared P07 deployment documentation outside this repository.
 
 ---
 
