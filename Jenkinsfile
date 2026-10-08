@@ -66,7 +66,7 @@ pipeline {
 
                     echo "2/3: Running ASP.NET Core Backend Tests..."
                     sh '''
-                        docker run --rm -v "${WORKSPACE}:/app" -w /app mcr.microsoft.com/dotnet/sdk:10.0-preview sh -c "
+                        docker run --rm -v "${WORKSPACE}:/app" -w /app mcr.microsoft.com/dotnet/sdk:10.0 sh -c "
                             dotnet test backend/P07.Tests/P07.Tests.csproj -c Release
                         "
                     '''
