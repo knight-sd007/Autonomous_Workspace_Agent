@@ -60,7 +60,7 @@ pipeline {
                         "
                         docker run --rm -v "${WORKSPACE}:/app" -w /app/mcp-server python:3.12-slim sh -c "
                             pip install --no-cache-dir -r requirements.txt &&
-                            PYTHONPATH=/app pytest tests/ -v
+                            PYTHONPATH=/app/mcp-server python -m pytest tests/ -v
                         "
                     '''
 
