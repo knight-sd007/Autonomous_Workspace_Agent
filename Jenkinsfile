@@ -56,11 +56,11 @@ pipeline {
                     sh '''
                         docker run --rm -v "${WORKSPACE}:/app" -w /app/agent-runtime python:3.12-slim sh -c "
                             pip install --no-cache-dir -r requirements.txt &&
-                            PYTHONPATH=/app/agent-runtime python -m pytest tests/ -v
+                            python -m pytest tests/ -v
                         "
                         docker run --rm -v "${WORKSPACE}:/app" -w /app/mcp-server python:3.12-slim sh -c "
                             pip install --no-cache-dir -r requirements.txt &&
-                            PYTHONPATH=/app/mcp-server python -m pytest tests/ -v
+                            python -m pytest tests/ -v
                         "
                     '''
 
