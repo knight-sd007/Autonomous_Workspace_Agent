@@ -22,7 +22,7 @@ RUN npm run check && npm run build
 # ------------------------------------------------------------------------------
 # Stage 2: Build ASP.NET Core backend
 # ------------------------------------------------------------------------------
-FROM mcr.microsoft.com/dotnet/sdk:10.0-preview AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 
 WORKDIR /src
 
@@ -47,7 +47,7 @@ RUN dotnet publish P07.Api.csproj -c Release -o /app/publish /p:UseAppHost=false
 # ------------------------------------------------------------------------------
 # Stage 3: Minimal non-root ASP.NET Core runtime
 # ------------------------------------------------------------------------------
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-preview AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 
 WORKDIR /app
 
