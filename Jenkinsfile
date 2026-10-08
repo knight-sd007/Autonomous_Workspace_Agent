@@ -150,63 +150,64 @@ pipeline {
         stage('Post-Deployment Verification') {
             steps {
                 script {
-                    sh """
-                        MAX_ATTEMPTS=20
-                        SLEEP_SECONDS=2
-                        CURL_TIMEOUT=2
-                        P07_HEALTH_URL="http://127.0.0.1:8007/health"
-                        API_HEALTH_URL="http://127.0.0.1:8007/api/v1/health"
+                    withEnv(["P07_PUBLIC_HOST=${params.OCI_HOST}"]) {
+                        sh '''
+                            MAX_ATTEMPTS=20
+                            SLEEP_SECONDS=2
+                            CURL_TIMEOUT=2
+                            P07_HEALTH_URL="http://127.0.0.1:8007/health"
+                            API_HEALTH_URL="http://127.0.0.1:8007/api/v1/health"
 
-                        echo "Layer 1 Verification: P07 local endpoint readiness ($P07_HEALTH_URL)..."
-                        ATTEMPT=1
-                        SUCCESS=0
+                            echo "Layer 1 Verification: P07 local endpoint readiness ($P07_HEALTH_URL)..."
+                            ATTEMPT=1
+                            SUCCESS=0
 
-                        while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
-                            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time "$CURL_TIMEOUT" "$P07_HEALTH_URL") || HTTP_CODE="000"
-                            if [ "$HTTP_CODE" = "200" ]; then
-                                echo "[Attempt $ATTEMPT/$MAX_ATTEMPTS] P07 endpoint healthcheck: PASS (HTTP 200 OK)"
-                                SUCCESS=1
-                                break
-                            else
+                            while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+                                HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time "$CURL_TIMEOUT" "$P07_HEALTH_URL") || HTTP_CODE="000"
+                                if [ "$HTTP_CODE" = "200" ]; then
+                                    echo "[Attempt $ATTEMPT/$MAX_ATTEMPTS] P07 endpoint healthcheck: PASS (HTTP 200 OK)"
+                                    SUCCESS=1
+                                    break
+                                fi
+
                                 echo "[Attempt $ATTEMPT/$MAX_ATTEMPTS] P07 starting up (HTTP $HTTP_CODE). Retrying..."
                                 sleep "$SLEEP_SECONDS"
                                 ATTEMPT=$((ATTEMPT + 1))
+                            done
+
+                            if [ $SUCCESS -ne 1 ]; then
+                                echo "ERROR: P07 endpoint readiness check failed after $MAX_ATTEMPTS attempts against $P07_HEALTH_URL (Status: $HTTP_CODE)!"
+                                exit 1
                             fi
-                        done
 
-                        if [ $SUCCESS -ne 1 ]; then
-                            echo "ERROR: P07 endpoint readiness check failed after $MAX_ATTEMPTS attempts against $P07_HEALTH_URL (Status: $HTTP_CODE)!"
-                            exit 1
-                        fi
-
-                        echo "Layer 1b Verification: ASP.NET Core API health through same public endpoint ($API_HEALTH_URL)..."
-                        API_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time "$CURL_TIMEOUT" "$API_HEALTH_URL") || API_CODE="000"
-                        if [ "$API_CODE" != "200" ]; then
-                            echo "ERROR: Backend API health check returned HTTP $API_CODE at $API_HEALTH_URL"
-                            exit 1
-                        else
+                            echo "Layer 1b Verification: ASP.NET Core API health through same public endpoint ($API_HEALTH_URL)..."
+                            API_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time "$CURL_TIMEOUT" "$API_HEALTH_URL") || API_CODE="000"
+                            if [ "$API_CODE" != "200" ]; then
+                                echo "ERROR: Backend API health check returned HTTP $API_CODE at $API_HEALTH_URL"
+                                exit 1
+                            fi
                             echo "Layer 1b API Healthcheck: PASS (HTTP 200 OK)"
-                        fi
 
-                        echo "Layer 2 Verification: Cloudflared Tunnel process verification..."
-                        if pgrep cloudflared >/dev/null || systemctl is-active cloudflared >/dev/null 2>&1 || docker ps | grep -q cloudflared; then
-                            echo "Cloudflared tunnel status: RUNNING"
-                        else
-                            echo "ERROR: Cloudflared tunnel process is not active on host!"
-                            exit 1
-                        fi
+                            echo "Layer 2 Verification: Cloudflared Tunnel process verification..."
+                            if pgrep cloudflared >/dev/null || systemctl is-active cloudflared >/dev/null 2>&1 || docker ps | grep -q cloudflared; then
+                                echo "Cloudflared tunnel status: RUNNING"
+                            else
+                                echo "ERROR: Cloudflared tunnel process is not active on host!"
+                                exit 1
+                            fi
 
-                        echo "Layer 3 Verification: Public HTTPS route (https://${params.OCI_HOST})..."
-                        HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" --max-time 10 https://${params.OCI_HOST} || echo "CURL_ERROR")
-                        if [ "$HTTP_STATUS" = "200" ]; then
-                            echo "Public Cloudflare route: PASS (HTTP 200 OK)"
-                        elif [ "$HTTP_STATUS" = "503" ] || [ "$HTTP_STATUS" = "403" ]; then
-                            echo "Public Cloudflare route: CHALLENGED (Cloudflare Under Attack Mode Active — HTTP $HTTP_STATUS. Deployment Healthy)."
-                        else
-                            echo "ERROR: Public Cloudflare route failed with status $HTTP_STATUS"
-                            exit 1
-                        fi
-                    """
+                            echo "Layer 3 Verification: Public HTTPS route (https://$P07_PUBLIC_HOST)..."
+                            HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" --max-time 10 "https://$P07_PUBLIC_HOST" || echo "CURL_ERROR")
+                            if [ "$HTTP_STATUS" = "200" ]; then
+                                echo "Public Cloudflare route: PASS (HTTP 200 OK)"
+                            elif [ "$HTTP_STATUS" = "503" ] || [ "$HTTP_STATUS" = "403" ]; then
+                                echo "Public Cloudflare route: CHALLENGED (HTTP $HTTP_STATUS. Deployment Healthy)."
+                            else
+                                echo "ERROR: Public Cloudflare route failed with status $HTTP_STATUS"
+                                exit 1
+                            fi
+                        '''
+                    }
                 }
             }
         }
