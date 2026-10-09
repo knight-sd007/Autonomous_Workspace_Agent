@@ -11,6 +11,12 @@ RUN python -m venv /opt/venv && \
 # Stage 2: Production Runtime
 FROM python:3.12-slim AS runtime
 
+# Update base OS packages to patch vulnerabilities and clean package-manager cache
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get upgrade -y && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
 # Create non-root user
 RUN groupadd -g 1000 appgroup && \
     useradd -u 1000 -g appgroup -s /bin/sh -m appuser
