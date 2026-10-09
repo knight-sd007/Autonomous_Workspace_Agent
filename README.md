@@ -203,3 +203,9 @@ npm run build
 * **Local Single-User Scope**: Designed for local developer workstation assistance. Multi-tenant deployment would require containerized sandboxing per tenant.
 * **Ephemeral Confirmation State**: Human approval state is held in runtime memory and is not a durable approval/audit store.
 * **TOCTOU Symlink Limitation**: File operations use standard Python filesystem primitives; a theoretical Time-of-Check to Time-of-Use symlink race exists under unprivileged local file execution.
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
