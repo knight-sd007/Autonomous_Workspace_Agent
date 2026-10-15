@@ -1,5 +1,5 @@
 # Stage 1: Build CPython 3.12 dependencies and production packages
-FROM python:3.12-slim-bookworm AS builder
+FROM python:3.12-slim-trixie AS builder
 
 WORKDIR /build
 
@@ -20,8 +20,8 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 # Create workspace directory with nonroot (UID: 65532) permissions
 RUN mkdir -p /workspace && chown -R 65532:65532 /workspace
 
-# Stage 2: Minimal hardened Distroless C/C++ Debian 12 runtime
-FROM gcr.io/distroless/cc-debian12:nonroot AS runtime
+# Stage 2: Minimal hardened Distroless C/C++ Debian 13 runtime
+FROM gcr.io/distroless/cc-debian13:nonroot AS runtime
 
 WORKDIR /app
 

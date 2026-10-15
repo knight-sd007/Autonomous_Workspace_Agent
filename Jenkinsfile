@@ -54,11 +54,11 @@ pipeline {
                 script {
                     echo "1/3: Running Python Agent Runtime and MCP tests..."
                     sh '''
-                        docker run --rm -v "${WORKSPACE}:/app" -w /app/agent-runtime python:3.12-slim-bookworm sh -c "
+                        docker run --rm -v "${WORKSPACE}:/app" -w /app/agent-runtime python:3.12-slim-trixie sh -c "
                             pip install --no-cache-dir -r requirements.txt &&
                             python -m pytest tests/ -v
                         "
-                        docker run --rm -v "${WORKSPACE}:/app" -w /app/mcp-server python:3.12-slim-bookworm sh -c "
+                        docker run --rm -v "${WORKSPACE}:/app" -w /app/mcp-server python:3.12-slim-trixie sh -c "
                             pip install --no-cache-dir -r requirements.txt &&
                             python -m pytest tests/ -v
                         "
@@ -121,7 +121,7 @@ pipeline {
                         docker run --rm \
                             -v "\${WORKSPACE}:/workspace:ro" \
                             -w /workspace \
-                            python:3.12-slim-bookworm python3 -c '
+                            python:3.12-slim-trixie python3 -c '
 import json, sys
 
 try:
