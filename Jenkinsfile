@@ -100,6 +100,78 @@ pipeline {
             steps {
                 script {
                     echo "Scanning container images with Trivy..."
+
+                    echo "Diagnostic: Generating full Trivy JSON vulnerability report for Agent Runtime (${AGENT_TAG})..."
+                    sh """
+                        if ! docker run --rm \
+                            -v /var/run/docker.sock:/var/run/docker.sock \
+                            aquasec/trivy:latest image \
+                            --format json \
+                            ${AGENT_TAG} > trivy-agent-runtime-report.json; then
+                            echo "ERROR: Diagnostic Trivy vulnerability scan failed to execute against ${AGENT_TAG}!"
+                            exit 1
+                        fi
+
+                        if [ ! -s trivy-agent-runtime-report.json ]; then
+                            echo "ERROR: Diagnostic Trivy report (trivy-agent-runtime-report.json) is missing or empty!"
+                            exit 1
+                        fi
+
+                        echo "=== Trivy Detailed Vulnerability Report Summary: Agent Runtime (${AGENT_TAG}) ==="
+                        docker run --rm \
+                            -v "\${WORKSPACE}:/workspace:ro" \
+                            -w /workspace \
+                            python:3.12-slim python3 -c '
+import json, sys
+
+try:
+    with open("trivy-agent-runtime-report.json") as f:
+        data = json.load(f)
+except Exception as e:
+    print("ERROR: Failed to parse Trivy report JSON: {}".format(e), file=sys.stderr)
+    sys.exit(1)
+
+if not isinstance(data, dict):
+    print("ERROR: Trivy report JSON root is not an object.", file=sys.stderr)
+    sys.exit(1)
+
+if "Results" not in data or not isinstance(data["Results"], list):
+    print("ERROR: Trivy report root missing valid Results list.", file=sys.stderr)
+    sys.exit(1)
+
+results = data["Results"]
+found = False
+print("{:<18} | {:<25} | {:<16} | {:<16} | {:<10} | {:<10}".format("CVE", "PACKAGE", "INSTALLED", "FIXED", "SEVERITY", "STATUS"))
+print("-" * 105)
+for res in results:
+    if not isinstance(res, dict):
+        print("ERROR: Malformed result entry in Trivy report.", file=sys.stderr)
+        sys.exit(1)
+    vulns = res.get("Vulnerabilities")
+    if vulns is None:
+        continue
+    if not isinstance(vulns, list):
+        print("ERROR: Malformed Vulnerabilities field in result entry.", file=sys.stderr)
+        sys.exit(1)
+    for v in vulns:
+        if not isinstance(v, dict):
+            print("ERROR: Malformed vulnerability entry in Trivy report.", file=sys.stderr)
+            sys.exit(1)
+        found = True
+        cve = str(v.get("VulnerabilityID") or "N/A")[:18]
+        pkg = str(v.get("PkgName") or "N/A")[:25]
+        installed = str(v.get("InstalledVersion") or "N/A")[:16]
+        fixed = str(v.get("FixedVersion") or "N/A")[:16]
+        severity = str(v.get("Severity") or "N/A")[:10]
+        status = str(v.get("Status") or "N/A")[:10]
+        print("{:<18} | {:<25} | {:<16} | {:<16} | {:<10} | {:<10}".format(cve, pkg, installed, fixed, severity, status))
+
+if not found:
+    print("No vulnerabilities detected in Agent Runtime report.")
+'
+                    """
+
+                    echo "Executing HIGH/CRITICAL security gates..."
                     sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --severity HIGH,CRITICAL --exit-code 1 ${API_TAG}"
                     sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --severity HIGH,CRITICAL --exit-code 1 ${AGENT_TAG}"
                     sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --severity HIGH,CRITICAL --exit-code 1 ${MCP_TAG}"
@@ -227,6 +299,7 @@ pipeline {
 
     post {
         always {
+            archiveArtifacts artifacts: 'trivy-agent-runtime-report.json', allowEmptyArchive: true
             cleanWs(deleteDirs: true, notFailBuild: true)
         }
         success {
