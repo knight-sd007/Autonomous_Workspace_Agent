@@ -54,11 +54,11 @@ pipeline {
                 script {
                     echo "1/3: Running Python Agent Runtime and MCP tests..."
                     sh '''
-                        docker run --rm -v "${WORKSPACE}:/app" -w /app/agent-runtime python:3.12-slim sh -c "
+                        docker run --rm -v "${WORKSPACE}:/app" -w /app/agent-runtime python:3.12-slim-bookworm sh -c "
                             pip install --no-cache-dir -r requirements.txt &&
                             python -m pytest tests/ -v
                         "
-                        docker run --rm -v "${WORKSPACE}:/app" -w /app/mcp-server python:3.12-slim sh -c "
+                        docker run --rm -v "${WORKSPACE}:/app" -w /app/mcp-server python:3.12-slim-bookworm sh -c "
                             pip install --no-cache-dir -r requirements.txt &&
                             python -m pytest tests/ -v
                         "
@@ -88,9 +88,9 @@ pipeline {
                 script {
                     echo "Building production images for linux/arm64..."
                     sh """
-                        docker buildx build --platform linux/arm64 -t ${API_TAG} -t ${API_LATEST} -f backend/Dockerfile . --load
-                        docker buildx build --platform linux/arm64 -t ${AGENT_TAG} -t ${AGENT_LATEST} -f agent-runtime/Dockerfile agent-runtime/ --load
-                        docker buildx build --platform linux/arm64 -t ${MCP_TAG} -t ${MCP_LATEST} -f mcp-server/Dockerfile mcp-server/ --load
+                        docker buildx build --pull --platform linux/arm64 -t ${API_TAG} -t ${API_LATEST} -f backend/Dockerfile . --load
+                        docker buildx build --pull --platform linux/arm64 --build-arg APT_CACHE_BUST=${env.GIT_SHA} -t ${AGENT_TAG} -t ${AGENT_LATEST} -f agent-runtime/Dockerfile agent-runtime/ --load
+                        docker buildx build --pull --platform linux/arm64 --build-arg APT_CACHE_BUST=${env.GIT_SHA} -t ${MCP_TAG} -t ${MCP_LATEST} -f mcp-server/Dockerfile mcp-server/ --load
                     """
                 }
             }
@@ -121,7 +121,7 @@ pipeline {
                         docker run --rm \
                             -v "\${WORKSPACE}:/workspace:ro" \
                             -w /workspace \
-                            python:3.12-slim python3 -c '
+                            python:3.12-slim-bookworm python3 -c '
 import json, sys
 
 try:
