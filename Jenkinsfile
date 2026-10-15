@@ -89,8 +89,8 @@ pipeline {
                     echo "Building production images for linux/arm64..."
                     sh """
                         docker buildx build --pull --platform linux/arm64 -t ${API_TAG} -t ${API_LATEST} -f backend/Dockerfile . --load
-                        docker buildx build --pull --platform linux/arm64 --build-arg APT_CACHE_BUST=${env.GIT_SHA} -t ${AGENT_TAG} -t ${AGENT_LATEST} -f agent-runtime/Dockerfile agent-runtime/ --load
-                        docker buildx build --pull --platform linux/arm64 --build-arg APT_CACHE_BUST=${env.GIT_SHA} -t ${MCP_TAG} -t ${MCP_LATEST} -f mcp-server/Dockerfile mcp-server/ --load
+                        docker buildx build --pull --platform linux/arm64 -t ${AGENT_TAG} -t ${AGENT_LATEST} -f agent-runtime/Dockerfile agent-runtime/ --load
+                        docker buildx build --pull --platform linux/arm64 -t ${MCP_TAG} -t ${MCP_LATEST} -f mcp-server/Dockerfile mcp-server/ --load
                     """
                 }
             }

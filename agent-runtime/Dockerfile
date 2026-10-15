@@ -1,53 +1,67 @@
-# Stage 1: Build virtual environment
+# Stage 1: Build CPython 3.12 dependencies and production packages
 FROM python:3.12-slim-bookworm AS builder
 
 WORKDIR /build
 
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libsqlite3-0 \
+    libffi-dev \
+    libbz2-1.0 \
+    liblzma5 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
-RUN python -m venv /opt/venv && \
-    /opt/venv/bin/pip install --no-cache-dir -r requirements.txt && \
-    /opt/venv/bin/pip uninstall -y pip
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
-# Stage 2: Production Runtime
-FROM python:3.12-slim-bookworm AS runtime
+# Create workspace directory with nonroot (UID: 65532) permissions
+RUN mkdir -p /workspace && chown -R 65532:65532 /workspace
 
-ARG APT_CACHE_BUST=1
-# Update base OS packages to patch vulnerabilities and clean package-manager cache
-RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get upgrade -y && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
-# Create non-root user
-RUN groupadd -g 1000 appgroup && \
-    useradd -u 1000 -g appgroup -s /bin/sh -m appuser
+# Stage 2: Minimal hardened Distroless C/C++ Debian 12 runtime
+FROM gcr.io/distroless/cc-debian12:nonroot AS runtime
 
 WORKDIR /app
 
-# Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PATH="/opt/venv/bin:$PATH" \
+    PYTHONPATH="/usr/local/lib/python3.12/site-packages:/app" \
+    LD_LIBRARY_PATH="/usr/local/lib:/usr/lib" \
+    PATH="/usr/local/bin:$PATH" \
     PORT=8001 \
     WORKSPACE_DIR=/workspace
 
-# Remove build/packaging tooling from base image to prevent SBOM/vulnerability leakage
-RUN rm -rf /usr/local/lib/python3.12/site-packages/pip*
+# Copy CPython 3.12 binaries, shared libraries, and standard library from builder
+COPY --from=builder /usr/local/bin/python3* /usr/local/bin/
+COPY --from=builder /usr/local/lib/libpython3* /usr/local/lib/
+COPY --from=builder /usr/local/lib/libpython3* /usr/lib/
+COPY --from=builder /usr/local/lib/python3.12 /usr/local/lib/python3.12
 
-# Copy virtual environment from builder
-COPY --from=builder /opt/venv /opt/venv
+# Copy required dynamic shared libraries for SQLite, ctypes, bz2, lzma, zlib, ssl, and expat
+COPY --from=builder /usr/lib/*-linux-gnu*/libsqlite3.so.0* /usr/lib/
+COPY --from=builder /usr/lib/*-linux-gnu*/libffi.so.8* /usr/lib/
+COPY --from=builder /usr/lib/*-linux-gnu*/libbz2.so.1.0* /usr/lib/
+COPY --from=builder /usr/lib/*-linux-gnu*/liblzma.so.5* /usr/lib/
+COPY --from=builder /usr/lib/*-linux-gnu*/libz.so.1* /usr/lib/
+COPY --from=builder /usr/lib/*-linux-gnu*/libssl.so.3* /usr/lib/
+COPY --from=builder /usr/lib/*-linux-gnu*/libcrypto.so.3* /usr/lib/
+COPY --from=builder /usr/lib/*-linux-gnu*/libexpat.so.1* /usr/lib/
 
-# Copy application source code
-COPY app/ ./app/
+# Copy isolated production packages from builder
+COPY --from=builder /install/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=builder /install/bin/uvicorn /usr/local/bin/uvicorn
 
-# Create workspace directory with correct permissions
-RUN mkdir -p /workspace && chown -R appuser:appgroup /workspace /app /opt/venv
+# Copy application source code and workspace directory with nonroot ownership
+COPY --chown=65532:65532 app/ ./app/
+COPY --from=builder --chown=65532:65532 /workspace /workspace
 
-USER appuser
+USER nonroot:nonroot
 
 EXPOSE 8001
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=5s --retries=3 \
-    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')" || exit 1
+    CMD ["/usr/local/bin/python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]
+CMD ["/usr/local/bin/python3", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]
